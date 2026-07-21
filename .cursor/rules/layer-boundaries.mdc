@@ -1,0 +1,25 @@
+---
+description: Границы слоёв Domain / Application / Infrastructure
+globs: src/**/*.py
+alwaysApply: false
+---
+
+# Layer Boundaries
+
+```
+domain/          → только stdlib + numpy типы
+application/     → domain + interfaces (Protocol)
+infrastructure/  → application.interfaces + внешние библиотеки
+main.py          → сборка всех слоёв
+```
+
+```python
+# ❌ BAD — domain знает про Whisper
+from src.infrastructure.stt.whisper import LocalWhisperSTT
+
+# ✅ GOOD — application зависит от Protocol
+def __init__(self, stt_service: STTService) -> None: ...
+```
+
+- Новые STT/LLM/TTS — реализация `Protocol` в `infrastructure/`, регистрация через фабрику в `main.py`.
+- LLM: application знает только `LLMService`; выбор провайдера — `create_llm_service(settings)` в infrastructure.

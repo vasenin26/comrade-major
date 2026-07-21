@@ -1,0 +1,26 @@
+---
+description: Dependency Injection через конструктор
+globs: src/**/*.py
+alwaysApply: false
+---
+
+# Manual Constructor DI
+
+Без DI-фреймворков. Зависимости — аргументы `__init__`, сборка — только в `src/main.py`.
+
+```python
+# interfaces.py
+class STTService(Protocol):
+    async def transcribe(self, audio_data: npt.NDArray[np.float32]) -> str: ...
+
+# coordinator.py
+class AgentCoordinator:
+    def __init__(self, stt_service: STTService) -> None:
+        self._stt = stt_service
+
+# main.py — LLM через фабрику, не напрямую
+coordinator = AgentCoordinator(stt_service=..., llm_service=create_llm_service(settings))
+```
+
+- Типы — `Protocol`, не ABC, если не нужен runtime polymorphism.
+- Тесты: передавать fake-реализации Protocol, не патчить импорты infrastructure.

@@ -1,0 +1,28 @@
+---
+description: Архитектура voice-agent — слои, пайплайн, Python 3.12+
+alwaysApply: true
+---
+
+# Voice Agent Architecture
+
+Стек: **Python 3.12+** (системный, без venv), `pip`, `pydantic-settings`, `mypy --strict`.
+
+## Слои
+
+| Слой | Путь | Ответственность |
+|------|------|-----------------|
+| Domain | `src/domain/` | Чистая бизнес-логика (чат, barge-in правила). Без sounddevice/torch/httpx |
+| Application | `src/application/` | Оркестрация воркеров, `Protocol`-интерфейсы, DI через конструктор |
+| Infrastructure | `src/infrastructure/` | Железо и модели: sounddevice, Silero VAD, Whisper, transformers LLM, TTS |
+| Config | `config/` | `Settings` через Pydantic, без бизнес-логики |
+
+## Принципы
+
+- **In-memory пайплайн**: Микрофон → VAD → STT передаёт `np.ndarray` / тензоры. Диск — только логи.
+- **DI в `main.py`**: Сборка конкретных реализаций и внедрение в `AgentCoordinator`.
+- **Barge-in**: `asyncio.Event` — каждая итерация TTS/воспроизведения проверяет `interrupt_event.is_set()`.
+
+## Запрещено
+
+- Импорт infrastructure/domain из неправильного слоя (domain не импортирует infrastructure).
+- Хардкод настроек — только через `config.settings.Settings`.

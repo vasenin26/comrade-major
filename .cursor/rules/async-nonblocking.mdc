@@ -1,0 +1,23 @@
+---
+description: Asyncio — не блокировать event loop
+globs: src/**/*.py
+alwaysApply: false
+---
+
+# Non-blocking Async
+
+Тяжёлые синхронные операции (инференс, диск, `sd.play`) **не вызывать напрямую** из `async def`.
+
+```python
+# ❌ BAD — блокирует event loop
+async def transcribe(self, audio: np.ndarray) -> str:
+    return self._model.transcribe(audio)
+
+# ✅ GOOD
+async def transcribe(self, audio: np.ndarray) -> str:
+    return await asyncio.to_thread(self._transcribe_sync, audio)
+```
+
+- CPU/GPU-инференс → `asyncio.to_thread` или процессный пул.
+- Callback sounddevice → только копирование буфера + `loop.call_soon_threadsafe(queue.put_nowait, ...)`.
+- В каждом `async def` с I/O — явный `await`; проверять mypy на пропущенные `await`.
