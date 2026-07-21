@@ -55,10 +55,13 @@ sudo ./scripts/setup-environment.sh
 Скрипт выполняет:
 
 1. Проверку прав root (`sudo`)
-2. Установку системных пакетов через `apt` (Python 3.12, PortAudio, ffmpeg и др.)
-3. `pip install -e .[dev]` в **системный** Python (с `--break-system-packages` на Debian/Ubuntu с PEP 668)
-4. Создание `.env` из `.env.example`, если `.env` ещё нет
-5. Быструю проверку импортов и `pytest`
+2. Установку системных пакетов через `apt` (PortAudio, ffmpeg и др.)
+3. Автовыбор **Python 3.12+** из apt (предпочитает 3.12; на Debian 13 без deadsnakes — 3.13)
+4. **Проверку NVIDIA/CUDA** (`nvidia-smi`) и установку PyTorch с подходящим index (cu126/cu124/cu118 или CPU)
+5. `pip install -e .[dev]` в **системный** Python
+6. Smoke-test CUDA в PyTorch и `pytest`
+
+> Скрипт сам определяет версию Python (3.12, 3.13 или 3.14) — не нужно вручную ставить именно 3.12.
 
 ### Ручная установка
 
@@ -67,27 +70,42 @@ sudo ./scripts/setup-environment.sh
 sudo apt update
 sudo apt install -y ca-certificates curl git build-essential pkg-config \
     portaudio19-dev libportaudio2 libsndfile1 ffmpeg \
-    python3.12 python3.12-dev python3-pip
+    python3.13 python3.13-dev python3-pip   # или python3.12 на Ubuntu 24.04
 
-# Python-зависимости в system Python
+# Python-зависимости (сначала PyTorch — CPU или CUDA)
 cd comrade-major
 python3.12 -m pip install --upgrade pip --break-system-packages
+python3.12 -m pip install torch torchaudio \
+    --index-url https://download.pytorch.org/whl/cu124 \
+    --break-system-packages
 python3.12 -m pip install -e ".[dev]" --break-system-packages
 
 # Конфигурация
 cp .env.example .env
 ```
 
-> Флаг `--break-system-packages` нужен на современных Debian/Ubuntu из‑за PEP 668. На выделенной машине под агента это ожидаемое поведение.
+> Флаг `--break-system-packages` нужен на Debian/Ubuntu с PEP 668.
 
-### GPU (опционально)
+### GPU / CUDA
 
-Для ускорения LLM/STT на NVIDIA GPU установите [драйвер CUDA](https://developer.nvidia.com/cuda-downloads) и переустановите PyTorch:
+Скрипт `setup-environment.sh` **сам определяет GPU**:
+
+1. Запускает `nvidia-smi`
+2. Читает версию CUDA из драйвера
+3. Ставит PyTorch с нужным index:
+   - CUDA 12.6+ / 13.x → `cu126`
+   - CUDA 12.4–12.5 → `cu124`
+   - CUDA 11.x → `cu118`
+   - GPU нет → CPU index
+4. Проверяет `torch.cuda.is_available()` и делает smoke-test на GPU
+
+Если `nvidia-smi` видит GPU, но PyTorch CUDA недоступна — скрипт завершится с ошибкой.
+
+Переопределение:
 
 ```bash
-python3.12 -m pip install torch torchaudio \
-    --index-url https://download.pytorch.org/whl/cu124 \
-    --break-system-packages
+FORCE_CPU=1 sudo ./scripts/setup-environment.sh
+TORCH_CUDA_INDEX=https://download.pytorch.org/whl/cu124 sudo ./scripts/setup-environment.sh
 ```
 
 В `.env` оставьте `LLM_DEVICE=auto`.
@@ -96,7 +114,7 @@ python3.12 -m pip install torch torchaudio \
 
 ```bash
 cp .env.example .env   # если ещё не создан
-python3.12 -m src.main
+python3.13 -m src.main   # или python3.12 — та версия, что установилась
 ```
 
 При первом запуске модели скачаются с HuggingFace (локальный LLM, Whisper, Silero VAD).
@@ -136,6 +154,6 @@ LLM_BASE_URL=https://api.openai.com/v1
 ## Тесты и типы
 
 ```bash
-python3.12 -m pytest
-python3.12 -m mypy config src
+python3.13 -m pytest
+python3.13 -m mypy config src
 ```
