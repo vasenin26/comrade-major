@@ -18,8 +18,8 @@ main.py          → сборка всех слоёв
 from src.infrastructure.stt.whisper import LocalWhisperSTT
 
 # ✅ GOOD — application зависит от Protocol
-def __init__(self, stt_service: STTService) -> None: ...
+def __init__(self, mind: Mind) -> None: ...
 ```
 
-- Новые STT/LLM/TTS — реализация `Protocol` в `infrastructure/`, регистрация через фабрику в `main.py`.
-- LLM: application знает только `LLMService`; выбор провайдера — `create_llm_service(settings)` в infrastructure.
+- Новые STT/Mind/TTS — реализация `Protocol` в `infrastructure/`, регистрация через фабрику в `main.py`.
+- Mind: application знает только `Mind`; выбор провайдера — `create_mind(settings, role=...)` в infrastructure.

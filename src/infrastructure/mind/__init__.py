@@ -1,17 +1,12 @@
-from src.infrastructure.audio_io import AudioIO
-from src.infrastructure.detector import SileroVAD
+from config.types import MindProvider, MindRole
 from src.infrastructure.mind.factory import create_mind
 from src.infrastructure.mind.local.transformers import LocalTransformersMind
 from src.infrastructure.mind.providers.openai_compatible import OpenAICompatibleMind
-from src.infrastructure.stt.whisper import LocalWhisperSTT
-from src.infrastructure.tts.kokoro import KokoroTTS
 
 __all__ = [
-    "AudioIO",
-    "KokoroTTS",
+    "MindProvider",
+    "MindRole",
     "LocalTransformersMind",
-    "LocalWhisperSTT",
     "OpenAICompatibleMind",
-    "SileroVAD",
     "create_mind",
 ]

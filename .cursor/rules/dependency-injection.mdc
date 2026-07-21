@@ -10,16 +10,16 @@ alwaysApply: false
 
 ```python
 # interfaces.py
-class STTService(Protocol):
-    async def transcribe(self, audio_data: npt.NDArray[np.float32]) -> str: ...
+class Mind(Protocol):
+    async def think(self, history: list[dict[str, str]]) -> str: ...
 
-# coordinator.py
-class AgentCoordinator:
-    def __init__(self, stt_service: STTService) -> None:
-        self._stt = stt_service
+# loops/primary.py
+class PrimaryThinkingLoop:
+    def __init__(self, mind: Mind) -> None:
+        self._mind = mind
 
-# main.py — LLM через фабрику, не напрямую
-coordinator = AgentCoordinator(stt_service=..., llm_service=create_llm_service(settings))
+# main.py — Mind через фабрику, не напрямую
+primary_mind = create_mind(settings, role=MindRole.PRIMARY)
 ```
 
 - Типы — `Protocol`, не ABC, если не нужен runtime polymorphism.

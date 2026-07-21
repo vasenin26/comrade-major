@@ -6,13 +6,11 @@ from threading import Thread
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, TextIteratorStreamer
 
-from src.infrastructure.llm.messages import build_chat_messages
-
 logger = logging.getLogger(__name__)
 
 
-class LocalTransformersLLM:
-    """Локальный LLM через HuggingFace transformers."""
+class LocalTransformersMind:
+    """Local Mind adapter via HuggingFace transformers."""
 
     def __init__(
         self,
@@ -24,7 +22,7 @@ class LocalTransformersLLM:
         self._max_new_tokens = max_new_tokens
         self._temperature = temperature
 
-        logger.info("Loading local LLM %s (device=%s)", model_id, device)
+        logger.info("Loading local mind %s (device=%s)", model_id, device)
         self._tokenizer = AutoTokenizer.from_pretrained(model_id)
         if self._tokenizer.pad_token is None:
             self._tokenizer.pad_token = self._tokenizer.eos_token
@@ -51,9 +49,8 @@ class LocalTransformersLLM:
         device = next(self._model.parameters()).device
         return input_ids.to(device)
 
-    def _generate_sync(self, prompt: str, history: list[dict[str, str]]) -> str:
-        messages = build_chat_messages(prompt, history)
-        input_ids = self._prepare_input_ids(messages)
+    def _think_sync(self, history: list[dict[str, str]]) -> str:
+        input_ids = self._prepare_input_ids(history)
         outputs = self._model.generate(
             input_ids,
             max_new_tokens=self._max_new_tokens,
@@ -64,9 +61,8 @@ class LocalTransformersLLM:
         generated = outputs[0][input_ids.shape[-1] :]
         return self._tokenizer.decode(generated, skip_special_tokens=True).strip()
 
-    def _stream_sync(self, prompt: str, history: list[dict[str, str]]) -> list[str]:
-        messages = build_chat_messages(prompt, history)
-        input_ids = self._prepare_input_ids(messages)
+    def _stream_sync(self, history: list[dict[str, str]]) -> list[str]:
+        input_ids = self._prepare_input_ids(history)
         streamer = TextIteratorStreamer(self._tokenizer, skip_special_tokens=True)
         generation_kwargs = {
             "input_ids": input_ids,
@@ -82,16 +78,16 @@ class LocalTransformersLLM:
         thread.join()
         return chunks
 
-    async def generate(self, prompt: str, history: list[dict[str, str]]) -> str:
-        return await asyncio.to_thread(self._generate_sync, prompt, history)
+    async def think(self, history: list[dict[str, str]]) -> str:
+        return await asyncio.to_thread(self._think_sync, history)
 
-    async def stream(self, prompt: str, history: list[dict[str, str]]) -> AsyncIterator[str]:
+    async def stream(self, history: list[dict[str, str]]) -> AsyncIterator[str]:
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue[str | None] = asyncio.Queue()
 
         def worker() -> None:
             try:
-                for chunk in self._stream_sync(prompt, history):
+                for chunk in self._stream_sync(history):
                     loop.call_soon_threadsafe(queue.put_nowait, chunk)
             finally:
                 loop.call_soon_threadsafe(queue.put_nowait, None)

@@ -11,16 +11,17 @@ alwaysApply: true
 
 | Слой | Путь | Ответственность |
 |------|------|-----------------|
-| Domain | `src/domain/` | Чистая бизнес-логика (чат, barge-in правила). Без sounddevice/torch/httpx |
-| Application | `src/application/` | Оркестрация воркеров, `Protocol`-интерфейсы, DI через конструктор |
-| Infrastructure | `src/infrastructure/` | Железо и модели: sounddevice, Silero VAD, Whisper, transformers LLM, TTS |
+| Domain | `src/domain/` | Чистая бизнес-логика (ConversationStore, роли сообщений, say). Без sounddevice/torch/httpx |
+| Application | `src/application/` | AgentRuntime, LoopWorker'ы, `Protocol`-интерфейсы (`Mind`, …), DI через конструктор |
+| Infrastructure | `src/infrastructure/` | Железо и адаптеры: sounddevice, Silero VAD, Whisper, Mind (transformers/OpenAI), TTS |
 | Config | `config/` | `Settings` через Pydantic, без бизнес-логики |
 
 ## Принципы
 
 - **In-memory пайплайн**: Микрофон → VAD → STT передаёт `np.ndarray` / тензоры. Диск — только логи.
-- **DI в `main.py`**: Сборка конкретных реализаций и внедрение в `AgentCoordinator`.
-- **Barge-in**: `asyncio.Event` — каждая итерация TTS/воспроизведения проверяет `interrupt_event.is_set()`.
+- **DI в `main.py`**: Сборка конкретных реализаций и внедрение в `AgentRuntime` / workers.
+- **Параллельные циклы**: `asyncio.Task` на каждый LoopWorker; `ConversationStore.snapshot()` без lock на время `Mind.think`.
+- **Предметный язык**: application использует `Mind.think`, не `LLM` / `_llm`.
 
 ## Запрещено
 

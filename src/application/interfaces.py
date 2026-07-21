@@ -9,12 +9,12 @@ class STTService(Protocol):
     async def transcribe(self, audio_data: npt.NDArray[np.float32]) -> str: ...
 
 
-class LLMService(Protocol):
-    """Контракт LLM. Application не зависит от конкретного провайдера."""
+class Mind(Protocol):
+    """Domain-facing reasoning capability. Adapters wrap concrete model providers."""
 
-    async def generate(self, prompt: str, history: list[dict[str, str]]) -> str: ...
+    async def think(self, history: list[dict[str, str]]) -> str: ...
 
-    async def stream(self, prompt: str, history: list[dict[str, str]]) -> AsyncIterator[str]: ...
+    async def stream(self, history: list[dict[str, str]]) -> AsyncIterator[str]: ...
 
 
 class TTSService(Protocol):
@@ -23,3 +23,15 @@ class TTSService(Protocol):
 
 class VADService(Protocol):
     def is_speech(self, audio_chunk: npt.NDArray[np.float32]) -> bool: ...
+
+
+class MessageLog(Protocol):
+    async def append(self, role: str, content: str) -> None: ...
+
+
+class LoopWorker(Protocol):
+    async def run(self) -> None: ...
+
+
+class AudioPlayer(Protocol):
+    async def play(self, audio: npt.NDArray[np.float32]) -> None: ...
