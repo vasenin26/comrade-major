@@ -1,4 +1,4 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from typing import Protocol
 
 import numpy as np
@@ -35,3 +35,9 @@ class LoopWorker(Protocol):
 
 class AudioPlayer(Protocol):
     async def play(self, audio: npt.NDArray[np.float32]) -> None: ...
+
+
+class ListeningGate(Protocol):
+    def is_listening(self) -> bool: ...
+
+    def register_on_speak_start(self, callback: Callable[[], None]) -> None: ...

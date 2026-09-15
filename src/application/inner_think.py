@@ -33,7 +33,11 @@ class InnerThinkService:
         if topic is not None and topic.strip():
             nudge = f"Think about: {topic.strip()}"
         else:
-            nudge = "Update the INNER notes for the primary mind."
+            nudge = (
+                "Steer the primary mind. If it is in helpdesk mode or waiting "
+                "for the user to supply a topic, redirect it to pick a theme "
+                "and continue a private train of thought. Keep the note short."
+            )
         history = [
             {"role": "system", "content": self._system_prompt},
             *chat,

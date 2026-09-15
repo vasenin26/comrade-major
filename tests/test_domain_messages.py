@@ -63,6 +63,19 @@ async def test_store_inner_slot_overwrite_and_snapshot_chat() -> None:
 
 
 @pytest.mark.asyncio
+async def test_snapshot_chat_orders_inner_then_thoughts() -> None:
+    store = ConversationStore(system_prompt="sys")
+    await store.set_inner_context("coach")
+    await store.append_private_thought("beat one")
+    await store.append(MessageRole.USER, "hi")
+    chat = await store.snapshot_chat()
+    assert chat[0]["content"] == "sys"
+    assert chat[1]["content"] == "[INNER]\ncoach"
+    assert chat[2]["content"] == "[THOUGHTS]\nbeat one"
+    assert chat[3] == {"role": "user", "content": "hi"}
+
+
+@pytest.mark.asyncio
 async def test_drop_oldest_preserves_inner_slot() -> None:
     store = ConversationStore(system_prompt="sys")
     await store.append(MessageRole.USER, "old")

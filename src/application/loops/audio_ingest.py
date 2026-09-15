@@ -5,7 +5,7 @@ import time
 import numpy as np
 import numpy.typing as npt
 
-from src.application.interfaces import MessageLog, STTService, VADService
+from src.application.interfaces import ListeningGate, MessageLog, STTService, VADService
 from src.domain.conversation import ConversationStore
 from src.domain.messages import MessageRole
 
@@ -23,6 +23,7 @@ class AudioIngestLoop:
         message_log: MessageLog,
         min_silence_ms: int,
         chunk_queue: asyncio.Queue[npt.NDArray[np.float32]],
+        listening_gate: ListeningGate | None = None,
     ) -> None:
         self._store = store
         self._stt = stt
@@ -30,8 +31,15 @@ class AudioIngestLoop:
         self._message_log = message_log
         self._min_silence_sec = min_silence_ms / 1000.0
         self._chunk_queue = chunk_queue
+        self._gate = listening_gate
         self._speech_chunks: list[npt.NDArray[np.float32]] = []
         self._silence_started_at: float | None = None
+        if self._gate is not None:
+            self._gate.register_on_speak_start(self._clear_speech_buffer)
+
+    def _clear_speech_buffer(self) -> None:
+        self._speech_chunks.clear()
+        self._silence_started_at = None
 
     async def run(self) -> None:
         while True:
@@ -39,6 +47,10 @@ class AudioIngestLoop:
             await self.handle_audio_chunk(chunk)
 
     async def handle_audio_chunk(self, audio_chunk: npt.NDArray[np.float32]) -> None:
+        if self._gate is not None and not self._gate.is_listening():
+            self._clear_speech_buffer()
+            return
+
         if self._vad.is_speech(audio_chunk):
             self._speech_chunks.append(audio_chunk)
             self._silence_started_at = None

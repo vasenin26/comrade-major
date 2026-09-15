@@ -18,6 +18,18 @@ class FakeSileroModel:
         return self
 
 
+class FakeSileroModelToReturnsNone:
+    """Mirrors real Silero packaged TTS: .to() mutates in place, returns None."""
+
+    def apply_tts(self, text: str, speaker: str, sample_rate: int) -> torch.Tensor:
+        _ = text, speaker, sample_rate
+        return torch.zeros(1, sample_rate // 20)
+
+    def to(self, device: torch.device) -> None:
+        _ = device
+        return None
+
+
 @pytest.mark.asyncio
 async def test_silero_synthesize_returns_audio() -> None:
     with patch.object(SileroTTS, "_load_model", return_value=FakeSileroModel()):
@@ -40,3 +52,14 @@ async def test_silero_empty_text_is_silence() -> None:
         audio = await tts.synthesize("   ")
     assert len(audio) == int(0.3 * 16_000)
     assert float(np.abs(audio).max()) == 0.0
+
+
+@pytest.mark.asyncio
+async def test_silero_to_returning_none_keeps_model() -> None:
+    with patch.object(
+        SileroTTS, "_load_model", return_value=FakeSileroModelToReturnsNone()
+    ):
+        tts = SileroTTS(sample_rate=16_000, device="cpu")
+        audio = await tts.synthesize("тест")
+    assert audio.dtype == np.float32
+    assert len(audio) > 0

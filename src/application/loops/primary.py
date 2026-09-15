@@ -26,6 +26,7 @@ class PrimaryThinkingLoop:
         context_trim_count: int = 2,
         error_backoff_seconds: float = 1.0,
         max_think_rounds: int = 2,
+        pulse_seconds: float = 15.0,
     ) -> None:
         self._store = store
         self._mind = mind
@@ -36,11 +37,17 @@ class PrimaryThinkingLoop:
         self._context_trim_count = context_trim_count
         self._error_backoff_seconds = error_backoff_seconds
         self._max_think_rounds = max_think_rounds
+        self._pulse_seconds = pulse_seconds
 
     async def run(self) -> None:
+        known = await self._store.revision()
         while True:
             try:
+                known = await self._store.wait_until_changed(
+                    known, timeout=self._pulse_seconds
+                )
                 await self._think_once()
+                known = await self._store.revision()
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -50,11 +57,13 @@ class PrimaryThinkingLoop:
                         "Context overflow — dropped %s oldest messages, retrying",
                         len(removed),
                     )
+                    known = await self._store.revision()
                     if not removed:
                         await asyncio.sleep(self._error_backoff_seconds)
                     continue
                 logger.exception("Primary thinking failed: %s", exc)
                 await asyncio.sleep(self._error_backoff_seconds)
+                known = await self._store.revision()
 
     async def _think_once(self) -> None:
         history = await self._store.snapshot_chat()
@@ -70,20 +79,20 @@ class PrimaryThinkingLoop:
             rounds += 1
 
         if not reply.strip():
-            await asyncio.sleep(0)
             return
         # Do not persist unresolved think calls as assistant chat messages
         if extract_think_topic(reply) is not None:
-            await asyncio.sleep(0)
             return
-
-        await self._store.append(MessageRole.ASSISTANT, reply)
-        await self._message_log.append(MessageRole.ASSISTANT.value, reply)
 
         say_text = extract_say_text(reply)
         if say_text:
-            asyncio.create_task(self._speak(say_text), name="primary-say")
-        await asyncio.sleep(0)
+            await self._store.append(MessageRole.ASSISTANT, reply)
+            await self._message_log.append(MessageRole.ASSISTANT.value, reply)
+            await self._speak(say_text)
+            return
+
+        await self._store.append_private_thought(reply)
+        await self._message_log.append("thought", reply)
 
     async def _speak(self, text: str) -> None:
         try:

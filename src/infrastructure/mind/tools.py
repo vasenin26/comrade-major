@@ -7,17 +7,20 @@ SAY_TOOL = {
     "function": {
         "name": "say",
         "description": (
-            "ONLY channel to the user. Speak the given text aloud via speakers/TTS. "
-            "The user cannot read your thoughts or chat text — if you do not call this "
-            "tool, the user hears nothing. Use for every answer, greeting, or reply "
-            "meant for the user."
+            "Send a short message to the user (speech). ONLY channel they receive. "
+            "Use sparingly — real replies to what they said, or a thought you "
+            "choose to share. Never send helpdesk filler "
+            "('чем помочь', 'жду вопрос', 'дайте тему')."
         ),
         "parameters": {
             "type": "object",
             "properties": {
                 "text": {
                     "type": "string",
-                    "description": "Exact words to speak aloud (Russian, short, 1–2 sentences).",
+                    "description": (
+                        "Exact words to send to the user "
+                        "(Russian, short, 1–2 sentences)."
+                    ),
                 }
             },
             "required": ["text"],
@@ -30,16 +33,16 @@ THINK_TOOL = {
     "function": {
         "name": "think",
         "description": (
-            "Ask the inner mind to ponder a topic. Blocks until finished. "
-            "The result overwrites the [INNER] context block for you to read. "
-            "Use when you need deeper analysis before speaking or deciding."
+            "Ask the inner mind for a steering note. Blocks until finished. "
+            "Result overwrites [INNER]. Use when stuck, helpdesk-looping, or "
+            "unsure how to continue a private theme."
         ),
         "parameters": {
             "type": "object",
             "properties": {
                 "topic": {
                     "type": "string",
-                    "description": "What the inner mind should think about.",
+                    "description": "What the inner mind should advise on.",
                 }
             },
             "required": ["topic"],

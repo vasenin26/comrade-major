@@ -8,6 +8,7 @@ from src.infrastructure.mind.providers.openai_compatible import OpenAICompatible
 
 def test_settings_defaults() -> None:
     settings = Settings(
+        _env_file=None,
         llm_provider=None,
         llm_model=None,
         llm_device=None,
@@ -15,24 +16,35 @@ def test_settings_defaults() -> None:
         llm_temperature=None,
         llm_api_key=None,
         llm_base_url=None,
+        primary_mind_provider=MindProvider.LOCAL,
     )
     assert settings.sample_rate == 16_000
     assert settings.vad_threshold == 0.5
     assert settings.whisper_model_size == "small"
     assert settings.primary_mind_provider == MindProvider.LOCAL
-    assert settings.primary_mind_model == "Qwen/Qwen2.5-7B-Instruct"
+    assert settings.primary_mind_model == "Qwen/Qwen2.5-3B-Instruct"
     assert "Comrade Major" in settings.primary_mind_system_prompt
     assert "Russian" in settings.primary_mind_system_prompt
     assert "say" in settings.primary_mind_system_prompt
     assert "think" in settings.primary_mind_system_prompt
-    assert "SPEAK" in settings.primary_mind_system_prompt
-    assert "THINK" in settings.primary_mind_system_prompt
+    assert "SEND TO USER" in settings.primary_mind_system_prompt
+    assert "PRIVATE THINK" in settings.primary_mind_system_prompt
+    assert "Hard bans" in settings.primary_mind_system_prompt
+    assert "[THOUGHTS]" in settings.primary_mind_system_prompt
+    assert "pulse" in settings.primary_mind_system_prompt.lower()
     assert "tool" in settings.primary_mind_system_prompt.lower()
     assert "never use 'say '" in settings.inner_voice_system_prompt
+    assert "loop" in settings.inner_voice_system_prompt.lower()
+    assert "helpdesk" in settings.inner_voice_system_prompt.lower()
+    assert "theme" in settings.inner_voice_system_prompt.lower()
+    assert "[THOUGHTS]" in settings.inner_voice_system_prompt
+    assert settings.primary_think_pulse_seconds == 15.0
+    assert settings.primary_thought_history == 8
     assert settings.inner_voice_interval_seconds == 60.0
     assert settings.tts_speaker == "aidar"
     assert settings.tts_device == "auto"
     assert settings.tts_synthesis_sample_rate == 24_000
+    assert settings.tts_listen_hangover_ms == 400
     assert settings.resolved_tts_device() in ("cpu", "cuda")
     assert settings.ui_host == "127.0.0.1"
     assert settings.ui_port == 8765

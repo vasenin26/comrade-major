@@ -4,6 +4,7 @@ import numpy as np
 import numpy.typing as npt
 import pytest
 
+from src.application.listening_gate import ListeningGate
 from src.application.loops.audio_ingest import AudioIngestLoop
 from src.domain.conversation import ConversationStore
 from src.domain.messages import MessageRole
@@ -65,3 +66,66 @@ async def test_audio_ingest_commits_utterance_after_silence() -> None:
     assert snap[-1].role == MessageRole.USER
     assert snap[-1].content == "hello from mic"
     assert log.entries[-1] == ("user", "hello from mic")
+
+
+@pytest.mark.asyncio
+async def test_audio_ingest_muted_while_not_listening() -> None:
+    store = ConversationStore()
+    log = FakeLog()
+    stt = FakeSTT()
+    vad = FakeVAD([True, True, False, False])
+    gate = ListeningGate(hangover_ms=0)
+    queue: asyncio.Queue[npt.NDArray[np.float32]] = asyncio.Queue()
+    loop = AudioIngestLoop(
+        store=store,
+        stt=stt,
+        vad=vad,
+        message_log=log,
+        min_silence_ms=0,
+        chunk_queue=queue,
+        listening_gate=gate,
+    )
+
+    chunk = np.zeros(4, dtype=np.float32)
+    async with gate.speaking():
+        await loop.handle_audio_chunk(chunk)
+        await loop.handle_audio_chunk(chunk)
+        await loop.handle_audio_chunk(chunk)
+        await loop.handle_audio_chunk(chunk)
+
+    assert stt.calls == 0
+    assert await store.length() == 0
+
+
+@pytest.mark.asyncio
+async def test_audio_ingest_clears_buffer_on_speak_start() -> None:
+    store = ConversationStore()
+    log = FakeLog()
+    stt = FakeSTT()
+    vad = FakeVAD([True, True, False, False])
+    gate = ListeningGate(hangover_ms=0)
+    queue: asyncio.Queue[npt.NDArray[np.float32]] = asyncio.Queue()
+    loop = AudioIngestLoop(
+        store=store,
+        stt=stt,
+        vad=vad,
+        message_log=log,
+        min_silence_ms=0,
+        chunk_queue=queue,
+        listening_gate=gate,
+    )
+
+    chunk = np.zeros(4, dtype=np.float32)
+    await loop.handle_audio_chunk(chunk)  # speech buffered
+    assert len(loop._speech_chunks) == 1
+
+    async with gate.speaking():
+        assert len(loop._speech_chunks) == 0
+
+    # After unmute, a fresh utterance still works
+    vad2 = FakeVAD([True, False, False])
+    loop._vad = vad2
+    await loop.handle_audio_chunk(chunk)
+    await loop.handle_audio_chunk(chunk)
+    await loop.handle_audio_chunk(chunk)
+    assert stt.calls == 1

@@ -8,6 +8,7 @@ from config.settings import Settings, get_settings
 from config.types import MindRole
 from src.application.inner_think import InnerThinkService
 from src.application.interfaces import LoopWorker, MessageLog
+from src.application.listening_gate import ListeningGate
 from src.application.loops import AudioIngestLoop, InnerVoiceLoop, PrimaryThinkingLoop
 from src.application.runtime import AgentRuntime
 from src.domain.conversation import ConversationStore
@@ -29,7 +30,8 @@ def build_runtime(
     store: ConversationStore,
     message_log: MessageLog,
 ) -> tuple[AgentRuntime, AudioIO]:
-    audio_io = AudioIO(sample_rate=settings.sample_rate)
+    gate = ListeningGate(hangover_ms=settings.tts_listen_hangover_ms)
+    audio_io = AudioIO(sample_rate=settings.sample_rate, listening_gate=gate)
 
     primary_mind = create_mind(settings, role=MindRole.PRIMARY)
     inner_voice = create_mind(settings, role=MindRole.INNER_VOICE)
@@ -52,6 +54,7 @@ def build_runtime(
             message_log=message_log,
             min_silence_ms=settings.vad_min_silence_ms,
             chunk_queue=chunk_queue,
+            listening_gate=gate,
         ),
         PrimaryThinkingLoop(
             store=store,
@@ -61,6 +64,7 @@ def build_runtime(
             audio_player=audio_io,
             inner_think=inner_think,
             context_trim_count=settings.mind_context_trim_count,
+            pulse_seconds=settings.primary_think_pulse_seconds,
         ),
         InnerVoiceLoop(
             store=store,
@@ -77,7 +81,10 @@ async def main() -> None:
     chunk_queue: asyncio.Queue[npt.NDArray[np.float32]] = asyncio.Queue()
 
     hub = MonitorHub()
-    store = ConversationStore(system_prompt=settings.primary_mind_system_prompt)
+    store = ConversationStore(
+        system_prompt=settings.primary_mind_system_prompt,
+        thought_history=settings.primary_thought_history,
+    )
     message_log = CompositeMessageLog(
         FileMessageLog(log_dir=settings.log_dir),
         BroadcastMessageLog(hub),

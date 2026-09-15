@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class _SileroTtsModel(Protocol):
     def apply_tts(self, text: str, speaker: str, sample_rate: int) -> torch.Tensor: ...
 
-    def to(self, device: torch.device) -> "_SileroTtsModel": ...
+    def to(self, device: torch.device) -> "_SileroTtsModel | None": ...
 
 _SILERO_MODEL_ID = "v5_ru"
 _SILERO_LANGUAGE = "ru"
@@ -34,7 +34,11 @@ class SileroTTS:
         self._speaker = speaker
         self._synthesis_sample_rate = synthesis_sample_rate
         self._device = self._resolve_device(device)
-        self._model: _SileroTtsModel = self._load_model().to(self._device)
+        # Silero's packaged TTSModel.to() mutates in place and returns None.
+        self._model = self._load_model()
+        moved = self._model.to(self._device)
+        if moved is not None:
+            self._model = moved
         logger.info(
             "Silero TTS loaded (speaker=%s, synth_sr=%s, out_sr=%s, device=%s)",
             speaker,
