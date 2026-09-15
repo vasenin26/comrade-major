@@ -33,19 +33,31 @@ def extract_say_text(content: str) -> str | None:
     return rest.lstrip(" \t\n\r:").strip()
 
 
+def extract_think_topic(content: str) -> str | None:
+    """Return topic if content starts with ``think`` (+ separator), else None."""
+    stripped = content.lstrip()
+    lower = stripped.lower()
+    if not lower.startswith("think"):
+        return None
+    rest = stripped[5:]
+    if not rest:
+        return ""
+    if rest[0] not in " \t\n\r:":
+        return None
+    return rest.lstrip(" \t\n\r:").strip()
+
+
 def to_chat_messages(messages: list[Message]) -> list[dict[str, str]]:
-    """Map domain messages to chat roles for Mind.think (inner → system note)."""
+    """Map domain chat messages to Mind.think roles.
+
+    INNER role messages are skipped — INNER context lives in ConversationStore
+    as a single overwriteable slot injected by snapshot_chat.
+    """
     result: list[dict[str, str]] = []
     for message in messages:
         if message.role == MessageRole.INNER:
-            result.append(
-                {
-                    "role": "system",
-                    "content": f"[inner voice] {message.content}",
-                }
-            )
-        else:
-            result.append({"role": message.role.value, "content": message.content})
+            continue
+        result.append({"role": message.role.value, "content": message.content})
     return result
 
 

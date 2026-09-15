@@ -5,6 +5,7 @@ import numpy as np
 import numpy.typing as npt
 import pytest
 
+from src.application.inner_think import InnerThinkService
 from src.application.loops.inner_voice import InnerVoiceLoop
 from src.application.loops.primary import PrimaryThinkingLoop
 from src.application.runtime import AgentRuntime
@@ -25,9 +26,11 @@ class ScriptedMind:
         self.replies = list(replies or [])
         self.error = error
         self.calls = 0
+        self.histories: list[list[dict[str, str]]] = []
 
     async def think(self, history: list[dict[str, str]]) -> str:
         self.calls += 1
+        self.histories.append(history)
         if self.error is not None and self.calls == 1:
             raise self.error
         if not self.replies:
@@ -85,6 +88,45 @@ async def test_primary_say_triggers_tts() -> None:
 
 
 @pytest.mark.asyncio
+async def test_primary_think_tool_waits_and_updates_inner_slot() -> None:
+    store = ConversationStore(system_prompt="sys")
+    log = FakeMessageLog()
+    tts = FakeTTS()
+    primary = ScriptedMind(replies=["think how to answer", "say готово"])
+    inner = ScriptedMind(replies=["нужно ответить кратко"])
+    inner_think = InnerThinkService(
+        store=store,
+        mind=inner,
+        message_log=log,
+        system_prompt="inner sys",
+    )
+    loop = PrimaryThinkingLoop(
+        store=store,
+        mind=primary,
+        message_log=log,
+        tts=tts,
+        audio_player=FakePlayer(),
+        inner_think=inner_think,
+    )
+    task = asyncio.create_task(loop.run())
+    await asyncio.sleep(0.1)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert primary.calls >= 2
+    assert inner.calls >= 1
+    assert await store.get_inner_context() == "нужно ответить кратко"
+    roles = {m.role for m in await store.snapshot()}
+    assert MessageRole.INNER not in roles
+    assert MessageRole.ASSISTANT in roles
+    chat = await store.snapshot_chat()
+    assert any(m["content"].startswith("[INNER]\n") for m in chat)
+    assert "готово" in tts.spoken
+    assert ("inner", "нужно ответить кратко") in log.entries
+
+
+@pytest.mark.asyncio
 async def test_primary_trims_on_context_overflow() -> None:
     store = ConversationStore(system_prompt="sys")
     await store.append(MessageRole.USER, "old")
@@ -120,6 +162,12 @@ async def test_runtime_primary_and_inner_parallel() -> None:
     log = FakeMessageLog()
     primary = ScriptedMind(replies=["primary-1", "primary-2", "primary-3"])
     inner = ScriptedMind(replies=["note-a", "note-b", "note-c"])
+    inner_think = InnerThinkService(
+        store=store,
+        mind=inner,
+        message_log=log,
+        system_prompt="inner sys",
+    )
 
     runtime = AgentRuntime(
         [
@@ -129,23 +177,54 @@ async def test_runtime_primary_and_inner_parallel() -> None:
                 message_log=log,
                 tts=FakeTTS(),
                 audio_player=FakePlayer(),
+                inner_think=inner_think,
             ),
             InnerVoiceLoop(
                 store=store,
-                mind=inner,
-                message_log=log,
-                system_prompt="inner sys",
+                inner_think=inner_think,
+                interval_seconds=0.05,
             ),
         ]
     )
     await runtime.start()
-    await asyncio.sleep(0.1)
+    await asyncio.sleep(0.15)
     await runtime.stop()
 
     assert primary.calls >= 1
     assert inner.calls >= 1
     roles = {m.role for m in await store.snapshot()}
     assert MessageRole.ASSISTANT in roles
-    assert MessageRole.INNER in roles
+    assert MessageRole.INNER not in roles
+    assert await store.get_inner_context() != ""
     chat = await store.snapshot_chat()
-    assert any(m["content"].startswith("[inner voice]") for m in chat)
+    assert any(m["content"].startswith("[INNER]\n") for m in chat)
+
+
+@pytest.mark.asyncio
+async def test_inner_voice_loop_interval_between_ponders() -> None:
+    store = ConversationStore(system_prompt="sys")
+    log = FakeMessageLog()
+    inner = ScriptedMind(replies=["a", "b", "c"])
+    inner_think = InnerThinkService(
+        store=store,
+        mind=inner,
+        message_log=log,
+        system_prompt="inner sys",
+    )
+    loop = InnerVoiceLoop(
+        store=store,
+        inner_think=inner_think,
+        interval_seconds=0.08,
+    )
+    task = asyncio.create_task(loop.run())
+    await asyncio.sleep(0.05)
+    calls_early = inner.calls
+    await asyncio.sleep(0.12)
+    calls_late = inner.calls
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert calls_early == 1
+    assert calls_late >= 2
+    assert MessageRole.INNER not in {m.role for m in await store.snapshot()}

@@ -72,6 +72,31 @@ have_command() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Под sudo secure_path часто без /usr/lib/wsl/lib — nvidia-smi «пропадает».
+ensure_wsl_nvidia_path() {
+    local wsl_lib="/usr/lib/wsl/lib"
+    if [[ -d "${wsl_lib}" && ":${PATH}:" != *":${wsl_lib}:"* ]]; then
+        PATH="${wsl_lib}:${PATH}"
+        export PATH
+    fi
+}
+
+resolve_nvidia_smi() {
+    if [[ -n "${NVIDIA_SMI_BIN:-}" && -x "${NVIDIA_SMI_BIN}" ]]; then
+        echo "${NVIDIA_SMI_BIN}"
+        return 0
+    fi
+    if [[ -x /usr/lib/wsl/lib/nvidia-smi ]]; then
+        echo /usr/lib/wsl/lib/nvidia-smi
+        return 0
+    fi
+    if have_command nvidia-smi; then
+        command -v nvidia-smi
+        return 0
+    fi
+    return 1
+}
+
 apt_package_available() {
     apt-cache show "$1" >/dev/null 2>&1
 }
@@ -182,7 +207,9 @@ PY
 }
 
 select_pytorch_index() {
-    local cuda_major cuda_minor
+    local cuda_major cuda_minor nvidia_smi
+
+    ensure_wsl_nvidia_path
 
     if [[ "${FORCE_CPU:-0}" == "1" ]]; then
         warn "FORCE_CPU=1 — использую CPU-сборку PyTorch."
@@ -197,22 +224,23 @@ select_pytorch_index() {
         return 0
     fi
 
-    if ! have_command nvidia-smi; then
+    if ! nvidia_smi="$(resolve_nvidia_smi)"; then
         warn "nvidia-smi не найден — PyTorch будет установлен в CPU-режиме."
         TORCH_INDEX="${TORCH_CPU_INDEX}"
         return 0
     fi
+    NVIDIA_SMI_BIN="${nvidia_smi}"
 
-    if ! nvidia-smi >/dev/null 2>&1; then
-        warn "nvidia-smi не отвечает — PyTorch будет установлен в CPU-режиме."
+    if ! "${NVIDIA_SMI_BIN}" >/dev/null 2>&1; then
+        warn "nvidia-smi не отвечает (${NVIDIA_SMI_BIN}) — PyTorch будет установлен в CPU-режиме."
         TORCH_INDEX="${TORCH_CPU_INDEX}"
         return 0
     fi
 
     CUDA_AVAILABLE=1
-    GPU_NAME="$(nvidia-smi --query-gpu=name --format=csv,noheader | head -n1 | xargs)"
-    DRIVER_VERSION="$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -n1 | xargs)"
-    CUDA_DRIVER_VERSION="$(nvidia-smi 2>/dev/null | sed -n 's/.*CUDA Version: \([0-9.]*\).*/\1/p' | head -n1)"
+    GPU_NAME="$("${NVIDIA_SMI_BIN}" --query-gpu=name --format=csv,noheader | head -n1 | xargs)"
+    DRIVER_VERSION="$("${NVIDIA_SMI_BIN}" --query-gpu=driver_version --format=csv,noheader | head -n1 | xargs)"
+    CUDA_DRIVER_VERSION="$("${NVIDIA_SMI_BIN}" 2>/dev/null | sed -n 's/.*CUDA Version: \([0-9.]*\).*/\1/p' | head -n1)"
 
     cuda_major="${CUDA_DRIVER_VERSION%%.*}"
     cuda_minor="${CUDA_DRIVER_VERSION#*.}"
@@ -229,6 +257,7 @@ select_pytorch_index() {
         TORCH_INDEX="https://download.pytorch.org/whl/cu124"
     fi
 
+    log "nvidia-smi: ${NVIDIA_SMI_BIN}"
     log "NVIDIA GPU: ${GPU_NAME}"
     log "Драйвер: ${DRIVER_VERSION}, CUDA (driver): ${CUDA_DRIVER_VERSION}"
     log "PyTorch index: ${TORCH_INDEX}"
@@ -266,11 +295,27 @@ install_pytorch() {
         "${PIP_ARGS[@]:-}"
 }
 
+upgrade_pip() {
+    # Debian/Ubuntu pip из apt часто без RECORD — --upgrade pip падает с
+    # uninstall-no-record-file. Достаточно рабочего pip; апгрейд необязателен.
+    local current
+    current="$("${PYTHON_BIN}" -m pip --version 2>/dev/null || true)"
+    if [[ -z "${current}" ]]; then
+        die "pip недоступен для ${PYTHON_BIN}."
+    fi
+
+    log "pip: ${current}"
+    if "${PYTHON_BIN}" -m pip install --upgrade pip "${PIP_ARGS[@]:-}" >/dev/null 2>&1; then
+        log "pip обновлён: $("${PYTHON_BIN}" -m pip --version)"
+        return 0
+    fi
+
+    warn "Не удалось обновить pip (часто из-за apt-пакета без RECORD) — продолжаю с текущим."
+}
+
 install_python_dependencies() {
     ensure_pip
-
-    log "Обновляю pip..."
-    "${PYTHON_BIN}" -m pip install --upgrade pip "${PIP_ARGS[@]:-}"
+    upgrade_pip
 
     detect_cuda
     install_pytorch
@@ -370,6 +415,7 @@ EOF
 main() {
     require_root
     resolve_target_user
+    ensure_wsl_nvidia_path
 
     log "Проект: ${ROOT_DIR}"
 

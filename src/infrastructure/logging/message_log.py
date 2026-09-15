@@ -1,8 +1,11 @@
 import asyncio
 import json
 import logging
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
+
+from src.application.interfaces import MessageLog
 
 logger = logging.getLogger(__name__)
 
@@ -28,3 +31,14 @@ class FileMessageLog:
     def _write_line(self, line: str) -> None:
         with self._path.open("a", encoding="utf-8") as handle:
             handle.write(line)
+
+
+class CompositeMessageLog:
+    """Fan-out append to multiple MessageLog sinks."""
+
+    def __init__(self, *logs: MessageLog) -> None:
+        self._logs: Sequence[MessageLog] = logs
+
+    async def append(self, role: str, content: str) -> None:
+        for log in self._logs:
+            await log.append(role, content)

@@ -1,3 +1,3 @@
-from src.infrastructure.logging.message_log import FileMessageLog
+from src.infrastructure.logging.message_log import CompositeMessageLog, FileMessageLog
 
-__all__ = ["FileMessageLog"]
+__all__ = ["CompositeMessageLog", "FileMessageLog"]

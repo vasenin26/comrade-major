@@ -1,3 +1,4 @@
-from src.infrastructure.tts.kokoro import KokoroTTS
+from src.infrastructure.tts.factory import create_tts
+from src.infrastructure.tts.silero import SileroTTS
 
-__all__ = ["KokoroTTS"]
+__all__ = ["SileroTTS", "create_tts"]

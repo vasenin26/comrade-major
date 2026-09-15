@@ -9,7 +9,7 @@
 - Python **3.12+** (системный)
 - pip — установка зависимостей в system Python
 - HuggingFace transformers, faster-whisper, Silero VAD, sounddevice
-- LLM: локально (`local`) или внешний OpenAI-compatible API (`openai`)
+- LLM: два mind — primary и inner voice; каждый `local` или OpenAI-compatible API (`openai`)
 
 ## Структура
 
@@ -117,7 +117,9 @@ cp .env.example .env   # если ещё не создан
 python3.13 -m src.main   # или python3.12 — та версия, что установилась
 ```
 
-При первом запуске модели скачаются с HuggingFace (локальный LLM, Whisper, Silero VAD).
+При первом запуске модели скачаются с HuggingFace / torch.hub (локальный LLM, Whisper, Silero VAD, **Silero TTS** для голоса).
+
+Веб-монитор (лог сообщений и текущий контекст): откройте [http://127.0.0.1:8765](http://127.0.0.1:8765) в браузере. Хост/порт — `UI_HOST` / `UI_PORT` в `.env`.
 
 ## Конфигурация
 
@@ -128,20 +130,33 @@ SAMPLE_RATE=16000
 VAD_THRESHOLD=0.5
 WHISPER_MODEL_SIZE=small
 
-LLM_PROVIDER=local
-LLM_MODEL=Qwen/Qwen2.5-0.5B-Instruct
-LLM_DEVICE=auto
-LLM_MAX_NEW_TOKENS=256
-LLM_TEMPERATURE=0.7
+TTS_SPEAKER=aidar
+TTS_DEVICE=auto
+TTS_SYNTHESIS_SAMPLE_RATE=24000
+
+PRIMARY_MIND_PROVIDER=local
+PRIMARY_MIND_MODEL=Qwen/Qwen2.5-0.5B-Instruct
+PRIMARY_MIND_DEVICE=auto
+PRIMARY_MIND_MAX_NEW_TOKENS=256
+PRIMARY_MIND_TEMPERATURE=0.7
+
+# Inner voice на OpenAI (опционально; иначе как primary)
+INNER_VOICE_PROVIDER=openai
+INNER_VOICE_MODEL=gpt-5-mini
+INNER_VOICE_MAX_NEW_TOKENS=128
+INNER_VOICE_API_KEY=sk-...
+# INNER_VOICE_REASONING_EFFORT=minimal
 ```
 
-Для внешнего LLM-провайдера:
+Legacy-алиасы `LLM_*` по-прежнему мапятся на primary.
+
+Для primary на внешнем OpenAI-compatible API:
 
 ```env
-LLM_PROVIDER=openai
-LLM_MODEL=gpt-4o-mini
-LLM_API_KEY=sk-...
-LLM_BASE_URL=https://api.openai.com/v1
+PRIMARY_MIND_PROVIDER=openai
+PRIMARY_MIND_MODEL=gpt-4o-mini
+PRIMARY_MIND_API_KEY=sk-...
+PRIMARY_MIND_BASE_URL=https://api.openai.com/v1
 ```
 
 ## Архитектурные принципы

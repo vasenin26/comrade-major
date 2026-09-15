@@ -1,9 +1,15 @@
 import asyncio
 import logging
 
+from src.application.inner_think import InnerThinkService
 from src.application.interfaces import AudioPlayer, MessageLog, Mind, TTSService
 from src.domain.conversation import ConversationStore
-from src.domain.messages import MessageRole, extract_say_text, is_context_overflow_error
+from src.domain.messages import (
+    MessageRole,
+    extract_say_text,
+    extract_think_topic,
+    is_context_overflow_error,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -16,16 +22,20 @@ class PrimaryThinkingLoop:
         message_log: MessageLog,
         tts: TTSService,
         audio_player: AudioPlayer,
+        inner_think: InnerThinkService | None = None,
         context_trim_count: int = 2,
         error_backoff_seconds: float = 1.0,
+        max_think_rounds: int = 2,
     ) -> None:
         self._store = store
         self._mind = mind
         self._message_log = message_log
         self._tts = tts
         self._audio_player = audio_player
+        self._inner_think = inner_think
         self._context_trim_count = context_trim_count
         self._error_backoff_seconds = error_backoff_seconds
+        self._max_think_rounds = max_think_rounds
 
     async def run(self) -> None:
         while True:
@@ -49,9 +59,24 @@ class PrimaryThinkingLoop:
     async def _think_once(self) -> None:
         history = await self._store.snapshot_chat()
         reply = await self._mind.think(history)
+        rounds = 0
+        while self._inner_think is not None and rounds < self._max_think_rounds:
+            topic = extract_think_topic(reply)
+            if topic is None:
+                break
+            await self._inner_think.ponder(topic=topic)
+            history = await self._store.snapshot_chat()
+            reply = await self._mind.think(history)
+            rounds += 1
+
         if not reply.strip():
             await asyncio.sleep(0)
             return
+        # Do not persist unresolved think calls as assistant chat messages
+        if extract_think_topic(reply) is not None:
+            await asyncio.sleep(0)
+            return
+
         await self._store.append(MessageRole.ASSISTANT, reply)
         await self._message_log.append(MessageRole.ASSISTANT.value, reply)
 
