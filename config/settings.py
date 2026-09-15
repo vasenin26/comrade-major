@@ -26,7 +26,7 @@ class Settings(BaseSettings):
 
     # Primary mind (env: PRIMARY_MIND_* with legacy LLM_* aliases via validator below)
     primary_mind_provider: MindProvider = Field(default=MindProvider.LOCAL)
-    primary_mind_model: str = Field(default="Qwen/Qwen2.5-3B-Instruct")
+    primary_mind_model: str = Field(default="Qwen/Qwen2.5-7B-Instruct")
     primary_mind_device: str = Field(default="auto")
     primary_mind_max_new_tokens: int = Field(default=256, ge=1, le=4096)
     primary_mind_temperature: float = Field(default=0.7, ge=0.0, le=2.0)

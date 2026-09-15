@@ -20,7 +20,7 @@ def test_settings_defaults() -> None:
     assert settings.vad_threshold == 0.5
     assert settings.whisper_model_size == "small"
     assert settings.primary_mind_provider == MindProvider.LOCAL
-    assert settings.primary_mind_model == "Qwen/Qwen2.5-3B-Instruct"
+    assert settings.primary_mind_model == "Qwen/Qwen2.5-7B-Instruct"
     assert "Comrade Major" in settings.primary_mind_system_prompt
     assert "Russian" in settings.primary_mind_system_prompt
     assert "say" in settings.primary_mind_system_prompt
