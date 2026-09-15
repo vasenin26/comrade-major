@@ -45,6 +45,8 @@ class Settings(BaseSettings):
             "- Chat history holds only the user and messages you sent via `say`.\n"
             "- [THOUGHTS] is your rolling private monologue — continue that thread.\n"
             "- [INNER] is coaching from the inner mind; read it when present.\n"
+            "- [MEMORY] is durable long-term facts recalled from past sessions; "
+            "treat them as true unless the user clearly corrects them.\n"
             "\n"
             "What you do by default:\n"
             "On each wake, advance one beat of thought. Pick or continue a theme "
@@ -127,6 +129,29 @@ class Settings(BaseSettings):
 
     log_dir: str = Field(default="logs")
 
+    # Long-term memory (HippoRAG); uses OpenAI-compatible API (defaults to primary)
+    memory_enabled: bool = Field(default=True)
+    memory_dir: str = Field(default="memory")
+    memory_api_key: str | None = Field(default=None)
+    memory_base_url: str | None = Field(default=None)
+    memory_llm_model: str | None = Field(default=None)
+    memory_embedding_model: str = Field(default="text-embedding-3-small")
+    memory_embedding_base_url: str | None = Field(default=None)
+    memory_sleep_idle_seconds: float = Field(default=120.0, ge=5.0, le=86_400.0)
+    memory_consolidate_batch: int = Field(default=40, ge=1, le=500)
+    memory_recall_limit: int = Field(default=5, ge=1, le=50)
+    memory_consolidate_system_prompt: str = Field(
+        default=(
+            "You extract durable knowledge from a conversation transcript for "
+            "long-term memory. Output ONLY stable facts worth remembering "
+            "(names, preferences, relationships, decisions, concrete details). "
+            "One fact per line. No numbering, no quotes, no commentary.\n"
+            "Discard small talk, greetings, helpdesk filler, transient thoughts, "
+            "and anything that will not matter later.\n"
+            "If nothing is worth keeping, reply with exactly: NONE"
+        )
+    )
+
     ui_host: str = Field(default="127.0.0.1")
     ui_port: int = Field(default=8765, ge=1, le=65535)
 
@@ -188,6 +213,16 @@ class Settings(BaseSettings):
                 )
         return self
 
+    @model_validator(mode="after")
+    def validate_memory_settings(self) -> Self:
+        if self.memory_enabled and not self.resolved_memory_api_key():
+            raise ValueError(
+                "MEMORY_ENABLED requires an OpenAI-compatible API key "
+                "(MEMORY_API_KEY, PRIMARY_MIND_API_KEY, or LLM_API_KEY). "
+                "Set MEMORY_ENABLED=false to disable long-term memory."
+            )
+        return self
+
     def resolved_provider(self, role: MindRole) -> MindProvider:
         if role == MindRole.INNER_VOICE and self.inner_voice_provider is not None:
             return self.inner_voice_provider
@@ -232,6 +267,30 @@ class Settings(BaseSettings):
         if role == MindRole.INNER_VOICE:
             return self.inner_voice_system_prompt
         return self.primary_mind_system_prompt
+
+    def resolved_memory_api_key(self) -> str | None:
+        if self.memory_api_key is not None:
+            return self.memory_api_key
+        if self.primary_mind_api_key is not None:
+            return self.primary_mind_api_key
+        return self.inner_voice_api_key
+
+    def resolved_memory_base_url(self) -> str:
+        if self.memory_base_url is not None:
+            return self.memory_base_url
+        if self.inner_voice_base_url is not None and self.primary_mind_api_key is None:
+            return self.inner_voice_base_url
+        return self.primary_mind_base_url
+
+    def resolved_memory_llm_model(self) -> str:
+        if self.memory_llm_model is not None:
+            return self.memory_llm_model
+        return self.primary_mind_model
+
+    def resolved_memory_embedding_base_url(self) -> str:
+        if self.memory_embedding_base_url is not None:
+            return self.memory_embedding_base_url
+        return self.resolved_memory_base_url()
 
     def resolved_tts_device(self) -> str:
         if self.tts_device != "auto":

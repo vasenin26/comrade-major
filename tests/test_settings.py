@@ -17,6 +17,7 @@ def test_settings_defaults() -> None:
         llm_api_key=None,
         llm_base_url=None,
         primary_mind_provider=MindProvider.LOCAL,
+        memory_enabled=False,
     )
     assert settings.sample_rate == 16_000
     assert settings.vad_threshold == 0.5
@@ -31,6 +32,7 @@ def test_settings_defaults() -> None:
     assert "PRIVATE THINK" in settings.primary_mind_system_prompt
     assert "Hard bans" in settings.primary_mind_system_prompt
     assert "[THOUGHTS]" in settings.primary_mind_system_prompt
+    assert "[MEMORY]" in settings.primary_mind_system_prompt
     assert "pulse" in settings.primary_mind_system_prompt.lower()
     assert "tool" in settings.primary_mind_system_prompt.lower()
     assert "never use 'say '" in settings.inner_voice_system_prompt
@@ -74,10 +76,27 @@ def test_openai_provider_requires_api_key() -> None:
             primary_mind_api_key=None,
             llm_provider=None,
             llm_api_key=None,
+            memory_enabled=False,
         )
         raise AssertionError("Expected validation error")
     except ValueError as exc:
         assert "API key" in str(exc)
+
+
+def test_memory_enabled_requires_api_key() -> None:
+    try:
+        Settings(
+            _env_file=None,
+            primary_mind_provider=MindProvider.LOCAL,
+            primary_mind_api_key=None,
+            inner_voice_api_key=None,
+            llm_provider=None,
+            llm_api_key=None,
+            memory_enabled=True,
+        )
+        raise AssertionError("Expected validation error")
+    except ValueError as exc:
+        assert "MEMORY_ENABLED" in str(exc)
 
 
 def test_legacy_llm_env_aliases() -> None:
@@ -97,6 +116,7 @@ def test_inner_voice_falls_back_to_primary() -> None:
     settings = Settings(
         primary_mind_model="primary-model",
         primary_mind_provider=MindProvider.LOCAL,
+        memory_enabled=False,
         inner_voice_provider=None,
         inner_voice_model=None,
         inner_voice_device=None,
@@ -186,6 +206,7 @@ def test_resolved_proxy_fallback_and_override() -> None:
         inner_voice_proxy=None,
         llm_provider=None,
         llm_api_key=None,
+        memory_enabled=False,
     )
     assert settings.resolved_proxy(MindRole.PRIMARY) == "http://primary-proxy:8080"
     assert settings.resolved_proxy(MindRole.INNER_VOICE) == "http://primary-proxy:8080"
@@ -196,6 +217,7 @@ def test_resolved_proxy_fallback_and_override() -> None:
         inner_voice_proxy="http://127.0.0.1:7890",
         llm_provider=None,
         llm_api_key=None,
+        memory_enabled=False,
     )
     assert (
         settings_override.resolved_proxy(MindRole.INNER_VOICE)

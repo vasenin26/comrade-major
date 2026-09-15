@@ -29,6 +29,16 @@ class MessageLog(Protocol):
     async def append(self, role: str, content: str) -> None: ...
 
 
+class LongTermMemory(Protocol):
+    """Durable episodic buffer + consolidated knowledge recall."""
+
+    async def remember(self, role: str, content: str) -> None: ...
+
+    async def consolidate(self) -> int: ...
+
+    async def recall(self, query: str, limit: int) -> list[str]: ...
+
+
 class LoopWorker(Protocol):
     async def run(self) -> None: ...
 

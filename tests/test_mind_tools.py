@@ -75,6 +75,7 @@ def test_create_mind_local_primary_enables_say_tool() -> None:
         llm_model=None,
         llm_device=None,
         llm_api_key=None,
+        memory_enabled=False,
     )
     with (
         patch(

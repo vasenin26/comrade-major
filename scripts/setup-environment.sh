@@ -322,6 +322,19 @@ install_python_dependencies() {
 
     log "Устанавливаю voice-agent и dev-зависимости..."
     "${PYTHON_BIN}" -m pip install -e "${ROOT_DIR}[dev]" "${PIP_ARGS[@]:-}"
+
+    install_hipporag
+}
+
+install_hipporag() {
+    log "Устанавливаю HippoRAG (долгосрочная память)..."
+    # Upstream pins torch/vllm/openai exact versions that conflict with this
+    # project. Install the package without deps; runtime deps come from
+    # pyproject.toml. Optional local backends (vLLM/GritLM) are stubbed on import.
+    if ! "${PYTHON_BIN}" -m pip install "hipporag>=2.0.0a4" --no-deps "${PIP_ARGS[@]:-}"; then
+        die "Не удалось установить hipporag (pip install hipporag --no-deps)."
+    fi
+    log "HippoRAG: OpenAI-compatible chat + embeddings. Если embeddings на другом хосте — MEMORY_EMBEDDING_BASE_URL."
 }
 
 prepare_env_file() {
@@ -341,7 +354,37 @@ prepare_env_file() {
 }
 
 verify_imports() {
+    log "Проверяю базовые импорты..."
     "${PYTHON_BIN}" -c 'import sounddevice, transformers, faster_whisper; print("imports: OK")'
+}
+
+verify_hipporag() {
+    log "Проверяю HippoRAG (долгосрочная память)..."
+    if ! ROOT_DIR="${ROOT_DIR}" "${PYTHON_BIN}" - <<'PY'
+import sys
+from pathlib import Path
+
+root = Path(__import__("os").environ["ROOT_DIR"])
+sys.path.insert(0, str(root))
+
+try:
+    from src.infrastructure.memory.hipporag_import import import_hipporag
+
+    cls = import_hipporag()
+except Exception as exc:
+    print(f"HippoRAG import failed: {exc}", file=sys.stderr)
+    print(
+        "Ожидается: pip install 'hipporag>=2.0.0a4' --no-deps "
+        "и зависимости из pyproject (python-igraph, networkx, openai, litellm, ...).",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+
+print(f"hipporag: OK ({cls})")
+PY
+    then
+        die "HippoRAG недоступен — долгосрочная память не заработает. См. сообщение выше."
+    fi
 }
 
 verify_cuda() {
@@ -380,6 +423,7 @@ PY
 verify_setup() {
     log "Проверяю установку..."
     verify_imports
+    verify_hipporag
     verify_cuda
     (cd "${ROOT_DIR}" && "${PYTHON_BIN}" -m pytest -q)
 }
@@ -399,6 +443,8 @@ Index URL: ${TORCH_INDEX}
 Дальнейшие шаги:
   cd ${ROOT_DIR}
   cp .env.example .env   # если .env ещё не создан
+  # MEMORY_ENABLED=true требует API key и embeddings endpoint
+  # MEMORY_ENABLED=false — отключить долгосрочную память
   ${PYTHON_BIN} -m src.main
 
 Проверки:

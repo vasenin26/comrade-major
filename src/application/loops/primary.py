@@ -2,7 +2,14 @@ import asyncio
 import logging
 
 from src.application.inner_think import InnerThinkService
-from src.application.interfaces import AudioPlayer, MessageLog, Mind, TTSService
+from src.application.interfaces import (
+    AudioPlayer,
+    LongTermMemory,
+    MessageLog,
+    Mind,
+    TTSService,
+)
+from src.application.memory_context import build_recall_query, inject_memory_passages
 from src.domain.conversation import ConversationStore
 from src.domain.messages import (
     MessageRole,
@@ -23,10 +30,12 @@ class PrimaryThinkingLoop:
         tts: TTSService,
         audio_player: AudioPlayer,
         inner_think: InnerThinkService | None = None,
+        memory: LongTermMemory | None = None,
         context_trim_count: int = 2,
         error_backoff_seconds: float = 1.0,
         max_think_rounds: int = 2,
         pulse_seconds: float = 15.0,
+        memory_recall_limit: int = 5,
     ) -> None:
         self._store = store
         self._mind = mind
@@ -34,10 +43,12 @@ class PrimaryThinkingLoop:
         self._tts = tts
         self._audio_player = audio_player
         self._inner_think = inner_think
+        self._memory = memory
         self._context_trim_count = context_trim_count
         self._error_backoff_seconds = error_backoff_seconds
         self._max_think_rounds = max_think_rounds
         self._pulse_seconds = pulse_seconds
+        self._memory_recall_limit = memory_recall_limit
 
     async def run(self) -> None:
         known = await self._store.revision()
@@ -65,8 +76,18 @@ class PrimaryThinkingLoop:
                 await asyncio.sleep(self._error_backoff_seconds)
                 known = await self._store.revision()
 
-    async def _think_once(self) -> None:
+    async def _history_with_memory(self) -> list[dict[str, str]]:
         history = await self._store.snapshot_chat()
+        if self._memory is None:
+            return history
+        query = await build_recall_query(self._store)
+        if not query.strip():
+            return history
+        passages = await self._memory.recall(query, self._memory_recall_limit)
+        return inject_memory_passages(history, passages)
+
+    async def _think_once(self) -> None:
+        history = await self._history_with_memory()
         reply = await self._mind.think(history)
         rounds = 0
         while self._inner_think is not None and rounds < self._max_think_rounds:
@@ -74,7 +95,7 @@ class PrimaryThinkingLoop:
             if topic is None:
                 break
             await self._inner_think.ponder(topic=topic)
-            history = await self._store.snapshot_chat()
+            history = await self._history_with_memory()
             reply = await self._mind.think(history)
             rounds += 1
 

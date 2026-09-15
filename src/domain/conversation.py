@@ -1,6 +1,7 @@
 import asyncio
 from collections import deque
 from collections.abc import Sequence
+from time import monotonic
 
 from src.domain.messages import Message, MessageRole, to_chat_messages
 
@@ -23,12 +24,17 @@ class ConversationStore:
         self._inner_context: str = ""
         self._private_thoughts: deque[str] = deque(maxlen=max(1, thought_history))
         self._revision: int = 0
+        self._last_user_activity: float = monotonic()
         if system_prompt:
             self._messages.append(Message(role=MessageRole.SYSTEM, content=system_prompt))
 
     async def revision(self) -> int:
         async with self._cond:
             return self._revision
+
+    async def seconds_since_user_activity(self) -> float:
+        async with self._cond:
+            return monotonic() - self._last_user_activity
 
     async def wait_until_changed(self, known: int, timeout: float) -> int:
         """Block until revision > known or timeout. Always returns current revision."""
@@ -94,12 +100,16 @@ class ConversationStore:
         message = Message(role=role, content=content)
         async with self._cond:
             self._messages.append(message)
+            if role == MessageRole.USER:
+                self._last_user_activity = monotonic()
             self._bump_unlocked()
         return message
 
     async def apply_patch(self, messages: Sequence[Message]) -> None:
         async with self._cond:
             self._messages.extend(messages)
+            if any(m.role == MessageRole.USER for m in messages):
+                self._last_user_activity = monotonic()
             if messages:
                 self._bump_unlocked()
 

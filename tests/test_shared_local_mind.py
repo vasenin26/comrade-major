@@ -28,6 +28,7 @@ def test_local_minds_share_weights_for_same_model() -> None:
         llm_model=None,
         llm_device=None,
         llm_api_key=None,
+        memory_enabled=False,
     )
 
     with (
